@@ -2,7 +2,9 @@
 
 __讨论QQ群 : 474643097__  
 
-[ET论坛](https://bbs.honorworkroom.com/forum.php)  
+[ET论坛](https://et-framework.cn)  
+
+# 注意！现在master正在开发中，商业使用请用5.0分支，6.0（master分支）可以参考
 
 # ET的介绍：
 ET是一个开源的游戏客户端（基于unity3d）服务端双端框架，服务端是使用C# .net core开发的分布式游戏服务端，其特点是开发效率高，性能强，双端共享逻辑代码，客户端服务端热更机制完善，同时支持可靠udp tcp websocket协议，支持服务端3D recast寻路等等  
@@ -66,7 +68,7 @@ ET框架的服务端是一个强大灵活的分布式服务端架构，完全可
 [运行指南](https://github.com/egametang/ET/blob/master/Book/1.1%E8%BF%90%E8%A1%8C%E6%8C%87%E5%8D%97.md)  
   
 相关网站:  
-[ET论坛](https://bbs.honorworkroom.com/forum.php)  
+[ET论坛](https://et-framework.cn)  
 
 有自己觉得写得不错的Module可以pr提交到下面的库中，造福大家!  
 [module共享仓库](https://github.com/egametang/ET-Modules)  
@@ -91,6 +93,7 @@ ET框架的服务端是一个强大灵活的分布式服务端架构，完全可
 1. [养不大](https://www.taptap.com/app/71064)  
 2. 天天躲猫猫2（ios2019春节下载排行19）  
 3. [牛虎棋牌](https://gitee.com/ECPS_admin/PlanB)  
+4. [五星麻将](https://github.com/wufanjoin/fivestar)  
 
 群友demo：  
 1. [斗地主（客户端服务端）](https://github.com/Viagi/LandlordsCore)  
@@ -101,15 +104,26 @@ ET框架的服务端是一个强大灵活的分布式服务端架构，完全可
 
 视频教程：  
 [肉饼老师主讲](http://www.taikr.com/my/course/972)  
+[官剑铭主讲]https://edu.manew.com/course/796
 [ET新手教程-初见主讲](https://pan.baidu.com/s/1a5-j2R5QctZpC9n3sMC9QQ) 密码: ru1j  
 [ET新手教程新版-初见主讲](https://www.bilibili.com/video/av33280463/?redirectFrom=h5)  
 [ET在Mac上运行指南-L主讲](https://pan.baidu.com/s/1VUQbdd1Yio7ULFXwAv7X7A) 密码: l3e3  
+[ET框架系列教程-烟雨主讲-6.0版本](https://space.bilibili.com/33595745/favlist?fid=759596845&ftype=create)
 
 .net core 游戏资源分享  
 [2D物理引擎Box2D](https://github.com/Zonciu/Box2DSharp)  
 [各种dotnet core项目收集](https://github.com/thangchung/awesome-dotnet-core)  
 
 __讨论QQ群 : 474643097__
+
+# ET 6.0发布beta版! 
+1.协程锁功能，解决异步队列的大杀器  
+2.抽象出Scene的概念,realm gate map location等等,都是一个个scene, 进程变成了容器，可以容纳各种Scene  
+3.内网消息全部使用Actor消息，一个Scene也是一个actor  
+4.升级到netcore3.0
+5.还有大量更新,等你去挖掘,这是beta版本,暂时ilrt没有调通,只用来学习思想,不保证正确,出了bug不要怪我  
+6.招聘一个中级渲染, 工作地点厦门,待遇优厚  
+......
 
 # ET 5.0发布! 5.0将是一个长期支持版本，之后发现的bug，5.0也会进行修复  
 1.增加了服务端3d recast寻路功能，客户端导出数据，服务端使用，做mmo及其方便  
@@ -185,3 +199,4 @@ __讨论QQ群 : 474643097__
 
 # 友情链接  
 [xasset](https://github.com/xasset/xasset) 致力于为 Unity 项目提供了一套 精简稳健 的资源管理环境  
+[QFramework](https://github.com/liangxiegame/QFramework) Your first K.I.S.S Unity3d Framework  

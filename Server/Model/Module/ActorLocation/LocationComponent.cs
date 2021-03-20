@@ -1,201 +1,129 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
-namespace ETModel
+namespace ET
 {
-	public abstract class LocationTask: Component
-	{
-		public abstract void Run();
-	}
-	
-	[ObjectSystem]
-	public class LocationQueryTaskAwakeSystem : AwakeSystem<LocationQueryTask, long>
-	{
-		public override void Awake(LocationQueryTask self, long key)
-		{
-			self.Key = key;
-			self.Tcs = new ETTaskCompletionSource<long>();
-		}
-	}
+    [ObjectSystem]
+    public class LockInfoAwakeSystem: AwakeSystem<LockInfo, long, CoroutineLock>
+    {
+        public override void Awake(LockInfo self, long lockInstanceId, CoroutineLock coroutineLock)
+        {
+            self.CoroutineLock = coroutineLock;
+            self.LockInstanceId = lockInstanceId;
+        }
+    }
 
-	public sealed class LocationQueryTask : LocationTask
-	{
-		public long Key;
+    public class LockInfo: Entity
+    {
+        public long LockInstanceId;
 
-		public ETTaskCompletionSource<long> Tcs;
+        public CoroutineLock CoroutineLock;
 
-		public ETTask<long> Task
-		{
-			get
-			{
-				return this.Tcs.Task;
-			}
-		}
+        public override void Dispose()
+        {
+            if (this.IsDisposed)
+            {
+                return;
+            }
 
-		public override void Run()
-		{
-			try
-			{
-				LocationComponent locationComponent = this.GetParent<LocationComponent>();
-				long location = locationComponent.Get(this.Key);
-				this.Tcs.SetResult(location);
-			}
-			catch (Exception e)
-			{
-				this.Tcs.SetException(e);
-			}
-		}
-	}
+            base.Dispose();
 
-	public class LocationComponent : Component
-	{
-		private readonly Dictionary<long, long> locations = new Dictionary<long, long>();
+            this.CoroutineLock.Dispose();
+            LockInstanceId = 0;
+        }
+    }
 
-		private readonly Dictionary<long, long> lockDict = new Dictionary<long, long>();
+    public class LocationComponent: Entity
+    {
+        public readonly Dictionary<long, long> locations = new Dictionary<long, long>();
 
-		private readonly Dictionary<long, Queue<LocationTask>> taskQueues = new Dictionary<long, Queue<LocationTask>>();
+        private readonly Dictionary<long, LockInfo> lockInfos = new Dictionary<long, LockInfo>();
 
-		public void Add(long key, long instanceId)
-		{
-			this.locations[key] = instanceId;
+        public async ETTask Add(long key, long instanceId)
+        {
+            using (await CoroutineLockComponent.Instance.Wait(CoroutineLockType.Location, key))
+            {
+                this.locations[key] = instanceId;
+                Log.Debug($"location add key: {key} instanceId: {instanceId}");
+            }
+        }
 
-			Log.Info($"location add key: {key} instanceId: {instanceId}");
+        public async ETTask Remove(long key)
+        {
+            using (await CoroutineLockComponent.Instance.Wait(CoroutineLockType.Location, key))
+            {
+                this.locations.Remove(key);
+                Log.Debug($"location remove key: {key}");
+            }
+        }
 
-			// 更新db
-			//await Game.Scene.GetComponent<DBProxyComponent>().Save(new Location(key, address));
-		}
+        public async ETVoid Lock(long key, long instanceId, int time = 0)
+        {
+            CoroutineLock coroutineLock = await CoroutineLockComponent.Instance.Wait(CoroutineLockType.Location, key);
 
-		public void Remove(long key)
-		{
-			Log.Info($"location remove key: {key}");
-			this.locations.Remove(key);
-		}
+            LockInfo lockInfo = EntityFactory.Create<LockInfo, long, CoroutineLock>(this.Domain, instanceId, coroutineLock);
+            lockInfo.Parent = this;
+            this.lockInfos.Add(key, lockInfo);
 
-		public long Get(long key)
-		{
-			this.locations.TryGetValue(key, out long instanceId);
-			return instanceId;
-		}
+            Log.Debug($"location lock key: {key} instanceId: {instanceId}");
 
-		public async ETVoid Lock(long key, long instanceId, int time = 0)
-		{
-			if (this.lockDict.ContainsKey(key))
-			{
-				Log.Error($"不可能同时存在两次lock, key: {key} InstanceId: {instanceId}");
-				return;
-			}
+            if (time > 0)
+            {
+                long lockInfoInstanceId = lockInfo.InstanceId;
+                await TimerComponent.Instance.WaitAsync(time);
+                if (lockInfo.InstanceId != lockInfoInstanceId)
+                {
+                    return;
+                }
 
-			Log.Info($"location lock key: {key} InstanceId: {instanceId}");
+                UnLock(key, instanceId, instanceId);
+            }
+        }
 
-			if (!this.locations.TryGetValue(key, out long saveInstanceId))
-			{
-				Log.Error($"actor没有注册, key: {key} InstanceId: {instanceId}");
-				return;
-			}
+        public void UnLock(long key, long oldInstanceId, long newInstanceId)
+        {
+            if (!this.lockInfos.TryGetValue(key, out LockInfo lockInfo))
+            {
+                Log.Error($"location unlock not found key: {key} {oldInstanceId}");
+                return;
+            }
 
-			if (saveInstanceId != instanceId)
-			{
-				Log.Error($"actor注册的instanceId与lock的不一致, key: {key} InstanceId: {instanceId} saveInstanceId: {saveInstanceId}");
-				return;
-			}
+            if (oldInstanceId != lockInfo.LockInstanceId)
+            {
+                Log.Error($"location unlock oldInstanceId is different: {key} {oldInstanceId}");
+                return;
+            }
 
-			this.lockDict.Add(key, instanceId);
+            Log.Debug($"location unlock key: {key} instanceId: {oldInstanceId} newInstanceId: {newInstanceId}");
 
-			// 超时则解锁
-			if (time > 0)
-			{
-				await Game.Scene.GetComponent<TimerComponent>().WaitAsync(time);
+            this.locations[key] = newInstanceId;
 
-				if (!this.lockDict.ContainsKey(key))
-				{
-					return;
-				}
-				Log.Info($"location timeout unlock key: {key} time: {time}");
-				this.UnLock(key);
-			}
-		}
+            this.lockInfos.Remove(key);
 
-		public void UnLockAndUpdate(long key, long oldInstanceId, long instanceId)
-		{
-			this.lockDict.TryGetValue(key, out long lockInstanceId);
-			if (lockInstanceId != oldInstanceId)
-			{
-				Log.Error($"unlock appid is different {lockInstanceId} {oldInstanceId}" );
-			}
-			Log.Info($"location unlock key: {key} oldInstanceId: {oldInstanceId} new: {instanceId}");
-			this.locations[key] = instanceId;
-			this.UnLock(key);
-		}
+            // 解锁
+            lockInfo.Dispose();
+        }
 
-		private void UnLock(long key)
-		{
-			this.lockDict.Remove(key);
+        public async ETTask<long> Get(long key)
+        {
+            using (await CoroutineLockComponent.Instance.Wait(CoroutineLockType.Location, key))
+            {
+                this.locations.TryGetValue(key, out long instanceId);
+                Log.Debug($"location get key: {key} instanceId: {instanceId}");
+                return instanceId;
+            }
+        }
 
-			if (!this.taskQueues.TryGetValue(key, out Queue<LocationTask> tasks))
-			{
-				return;
-			}
+        public override void Dispose()
+        {
+            if (this.IsDisposed)
+            {
+                return;
+            }
 
-			while (true)
-			{
-				if (tasks.Count <= 0)
-				{
-					this.taskQueues.Remove(key);
-					return;
-				}
-				if (this.lockDict.ContainsKey(key))
-				{
-					return;
-				}
+            base.Dispose();
 
-				LocationTask task = tasks.Dequeue();
-				try
-				{
-					task.Run();
-				}
-				catch (Exception e)
-				{
-					Log.Error(e);
-				}
-				task.Dispose();
-			}
-		}
-
-		public ETTask<long> GetAsync(long key)
-		{
-			if (!this.lockDict.ContainsKey(key))
-			{
-				this.locations.TryGetValue(key, out long instanceId);
-				Log.Info($"location get key: {key} {instanceId}");
-				return ETTask.FromResult(instanceId);
-			}
-
-			LocationQueryTask task = ComponentFactory.CreateWithParent<LocationQueryTask, long>(this, key);
-			this.AddTask(key, task);
-			return task.Task;
-		}
-
-		public void AddTask(long key, LocationTask task)
-		{
-			if (!this.taskQueues.TryGetValue(key, out Queue<LocationTask> tasks))
-			{
-				tasks = new Queue<LocationTask>();
-				this.taskQueues[key] = tasks;
-			}
-			tasks.Enqueue(task);
-		}
-
-		public override void Dispose()
-		{
-			if (this.IsDisposed)
-			{
-				return;
-			}
-			base.Dispose();
-			
-			this.locations.Clear();
-			this.lockDict.Clear();
-			this.taskQueues.Clear();
-		}
-	}
+            this.locations.Clear();
+            this.lockInfos.Clear();
+        }
+    }
 }

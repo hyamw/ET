@@ -1,19 +1,19 @@
-﻿using System;
-using System.Net;
+﻿using System.Collections.Generic;
 
-namespace ETModel
+namespace ET
 {
-	public class ActorMessageSenderComponent: Component
-	{
-		public ActorMessageSender Get(long actorId)
-		{
-			if (actorId == 0)
-			{
-				throw new Exception($"actor id is 0");
-			}
-			IPEndPoint ipEndPoint = StartConfigComponent.Instance.GetInnerAddress(IdGenerater.GetAppId(actorId));
-			ActorMessageSender actorMessageSender = new ActorMessageSender(actorId, ipEndPoint);
-			return actorMessageSender;
-		}
-	}
+    public class ActorMessageSenderComponent: Entity
+    {
+        public static long TIMEOUT_TIME = 40 * 1000;
+
+        public static ActorMessageSenderComponent Instance { get; set; }
+
+        public int RpcId;
+
+        public readonly SortedDictionary<int, ActorMessageSender> requestCallback = new SortedDictionary<int, ActorMessageSender>();
+
+        public long TimeoutCheckTimer;
+
+        public List<int> TimeoutActorMessageSenders = new List<int>();
+    }
 }

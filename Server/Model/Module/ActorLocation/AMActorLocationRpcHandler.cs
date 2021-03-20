@@ -1,61 +1,65 @@
 ﻿using System;
 
-namespace ETModel
+namespace ET
 {
-	public abstract class AMActorLocationRpcHandler<E, Request, Response>: IMActorHandler where E: Entity where Request: class, IActorLocationRequest where Response : class, IActorLocationResponse
-	{
-		protected static void ReplyError(Response response, Exception e, Action<Response> reply)
-		{
-			Log.Error(e);
-			response.Error = ErrorCode.ERR_RpcFail;
-			response.Message = e.ToString();
-			reply(response);
-		}
+    [ActorMessageHandler]
+    public abstract class AMActorLocationRpcHandler<E, Request, Response>: IMActorHandler where E : Entity where Request : class, IActorLocationRequest where Response : class, IActorLocationResponse
+    {
+        protected abstract ETTask Run(E unit, Request request, Response response, Action reply);
 
-		protected abstract ETTask Run(E unit, Request message, Action<Response> reply);
+        public async ETTask Handle(Entity entity, object actorMessage, Action<IActorResponse> reply)
+        {
+            try
+            {
+                Request request = actorMessage as Request;
+                if (request == null)
+                {
+                    Log.Error($"消息类型转换错误: {actorMessage.GetType().FullName} to {typeof (Request).Name}");
+                    return;
+                }
 
-		public async ETTask Handle(Session session, Entity entity, object actorMessage)
-		{
-			try
-			{
-				Request request = actorMessage as Request;
-				if (request == null)
-				{
-					Log.Error($"消息类型转换错误: {actorMessage.GetType().FullName} to {typeof (Request).Name}");
-					return;
-				}
-				E e = entity as E;
-				if (e == null)
-				{
-					Log.Error($"Actor类型转换错误: {entity.GetType().Name} to {typeof(E).Name}");
-					return;
-				}
+                E ee = entity as E;
+                if (ee == null)
+                {
+                    Log.Error($"Actor类型转换错误: {entity.GetType().Name} to {typeof (E).Name} --{typeof (Request).Name}");
+                    return;
+                }
 
-				int rpcId = request.RpcId;
-				
-				long instanceId = session.InstanceId;
-				
-				await this.Run(e, request, response =>
-				{
-					// 等回调回来,session可以已经断开了,所以需要判断session InstanceId是否一样
-					if (session.InstanceId != instanceId)
-					{
-						return;
-					}
-					response.RpcId = rpcId;
-					
-					session.Reply(response);
-				});
-			}
-			catch (Exception e)
-			{
-				throw new Exception($"解释消息失败: {actorMessage.GetType().FullName}", e);
-			}
-		}
+                int rpcId = request.RpcId;
+                Response response = Activator.CreateInstance<Response>();
 
-		public Type GetMessageType()
-		{
-			return typeof (Request);
-		}
-	}
+                void Reply()
+                {
+                    response.RpcId = rpcId;
+                    reply.Invoke(response);
+                }
+
+                try
+                {
+                    await this.Run(ee, request, response, Reply);
+                }
+                catch (Exception exception)
+                {
+                    Log.Error(exception);
+                    response.Error = ErrorCode.ERR_RpcFail;
+                    response.Message = exception.ToString();
+                    Reply();
+                }
+            }
+            catch (Exception e)
+            {
+                throw new Exception($"解释消息失败: {actorMessage.GetType().FullName}", e);
+            }
+        }
+
+        public Type GetRequestType()
+        {
+            return typeof (Request);
+        }
+
+        public Type GetResponseType()
+        {
+            return typeof (Response);
+        }
+    }
 }
